@@ -1,6 +1,6 @@
 # Roundabout-SSM
 
-rounD 데이터셋 기반 SSM(Mamba2) 회전교차로 진입 판단 및 주행계획 예측 프로젝트
+rounD 데이터셋 기반 SSM(Mamba2) 회전교차로 진입 판단 및 주행계획 예측 모델
 
 ## 목차
 
