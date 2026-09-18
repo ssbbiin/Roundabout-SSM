@@ -1,0 +1,67 @@
+{
+  "locationId": 0,
+  "method": "median vehicle position after entry-line crossing",
+  "lookaheadSec": 0.4,
+  "entries": [
+    {
+      "entryId": 0,
+      "conflictPoint": [
+        81.7339,
+        -70.6158
+      ],
+      "circulationTangent": [
+        0.8621540716595191,
+        0.5066461849465687
+      ],
+      "circulationHeadingDeg": 30.44069088355437,
+      "samples": 2685,
+      "medianSpreadMeters": 0.8416334415884472,
+      "p90SpreadMeters": 1.8844824278800543
+    },
+    {
+      "entryId": 1,
+      "conflictPoint": [
+        104.30539999999999,
+        -43.25595
+      ],
+      "circulationTangent": [
+        -0.6568910221451034,
+        0.7539855336975381
+      ],
+      "circulationHeadingDeg": 131.06319327353813,
+      "samples": 2656,
+      "medianSpreadMeters": 0.7959518353148785,
+      "p90SpreadMeters": 1.7725915884048815
+    },
+    {
+      "entryId": 2,
+      "conflictPoint": [
+        81.7435,
+        -23.4619
+      ],
+      "circulationTangent": [
+        -0.857374699528472,
+        -0.5146927477713886
+      ],
+      "circulationHeadingDeg": -149.02307996809256,
+      "samples": 3305,
+      "medianSpreadMeters": 0.8181907479310595,
+      "p90SpreadMeters": 1.9238837978440375
+    },
+    {
+      "entryId": 3,
+      "conflictPoint": [
+        57.9223,
+        -51.2248
+      ],
+      "circulationTangent": [
+        0.664167945378525,
+        -0.7475834002515496
+      ],
+      "circulationHeadingDeg": -48.38147594449809,
+      "samples": 2703,
+      "medianSpreadMeters": 0.756464308477274,
+      "p90SpreadMeters": 1.7187549877437345
+    }
+  ]
+}
