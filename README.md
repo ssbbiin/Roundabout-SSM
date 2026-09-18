@@ -1368,3 +1368,33 @@ Visualization
 
 CARLA나 실제 차량 제어를 포함하지 않고,
 rounD Dataset 기반의 회전교차로 진입 판단 및 주행계획 예측 모델 개발과 검증에 초점을 맞추었다.
+
+---
+
+## 13. 소스코드
+
+프로젝트 구현 코드는 기능별로 다음과 같이 구성하였다.
+
+```text
+Roundabout-SSM/
+├── configs/      # Geometry, split, normalization 설정
+├── dataset/      # Dataset 및 입력 데이터 구성
+├── models/       # LSTM / Mamba2 모델
+├── scripts/      # 전처리, 분석, 평가, 시각화
+├── train/        # 모델 학습 코드
+└── images/       # 결과 이미지 및 Replay GIF
+```
+
+주요 구현 파일:
+
+- [Mamba2 baseline](models/mamba_baseline.py)
+- [Residual Interaction Mamba2](models/mamba_residual_interaction.py)
+- [Final Mamba2 + Trajectory Head](models/mamba_trajectory.py)
+- [Interaction Dataset](dataset/interaction_dataset.py)
+- [Future Trajectory Dataset](dataset/trajectory_dataset.py)
+- [Mamba2 학습 코드](train/train_mamba.py)
+- [Final Trajectory 학습 코드](train/train_mamba_trajectory.py)
+- [Conflict Vehicle 매칭](scripts/24_match_conflict_vehicles.py)
+- [Interaction Feature 계산](scripts/26_compute_interaction_features.py)
+- [최종 예측 시각화](scripts/40_visualize_final_predictions.py)
+- [rounD Replay 생성](scripts/41_make_round_replay.py)
