@@ -2,6 +2,22 @@
 
 rounD 데이터셋 기반 SSM(Mamba2) 회전교차로 진입 판단 및 주행계획 예측 프로젝트
 
+## 목차
+
+- [1. 데이터셋 및 실험 대상](#1-데이터셋-및-실험-대상)
+- [2. 입력 데이터 구성](#2-입력-데이터-구성)
+- [3. 전체 처리 과정](#3-전체-처리-과정)
+- [4. Entry Line 정의 및 진입 이벤트 추출](#4-entry-line-정의-및-진입-이벤트-추출)
+- [5. GO / WAIT Label 및 Decision Sample 생성](#5-go--wait-label-및-decision-sample-생성)
+- [6. Baseline 모델 구성 및 비교](#6-baseline-모델-구성-및-비교)
+- [7. 학습 성능 및 추론 효율 비교](#7-학습-성능-및-추론-효율-비교)
+- [8. Conflict Point 및 Conflict Vehicle 분석](#8-conflict-point-및-conflict-vehicle-분석)
+- [9. TTC / Temporal Gap 기반 Interaction Feature](#9-ttc--temporal-gap-기반-interaction-feature)
+- [10. 미래 4초 주행 궤적 예측](#10-미래-4초-주행-궤적-예측)
+- [11. 최종 성능 비교 및 결과 정리](#11-최종-성능-비교-및-결과-정리)
+- [12. rounD Offline Replay 시연](#12-round-offline-replay-시연)
+- [13. 소스코드](#13-소스코드)
+
 ## 프로젝트 개요
 
 회전교차로에 진입하는 차량의 과거 주행 정보와 주변 차량의 움직임을 이용하여
@@ -28,6 +44,20 @@ rounD Dataset은 차량별 위치, 속도, 가속도, 진행방향(heading) 등�
 
 전체 24개 recording 중 동일한 회전교차로를 공유하는 **Location 0의 recording 02~23**을
 주 학습 및 평가 대상으로 사용하였다.
+
+### 데이터셋 출처
+
+본 프로젝트에서는 **rounD Dataset**을 사용하였다.
+
+rounD Dataset은 RWTH Aachen University의
+**Institute for Automotive Engineering (ika)**에서 구축한
+독일 회전교차로 기반 실제 도로 이용자 궤적 데이터셋이다.
+
+드론 촬영을 통해 차량, 자전거, 보행자 등의 자연스러운 주행 궤적을 수집했으며,
+위치, 속도, 가속도, heading 등의 정보를 제공한다.
+
+- 공식 페이지: https://levelxdata.com/round-dataset/
+- 데이터셋 논문: *The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany*
 
 ### 데이터 구성
 
@@ -1398,3 +1428,9 @@ Roundabout-SSM/
 - [Interaction Feature 계산](scripts/26_compute_interaction_features.py)
 - [최종 예측 시각화](scripts/40_visualize_final_predictions.py)
 - [rounD Replay 생성](scripts/41_make_round_replay.py)
+
+## Reference
+
+Krajewski, R., Moers, T., Bock, J., Vater, L., & Eckstein, L.  
+**The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany.**  
+IEEE ITSC, 2020.
