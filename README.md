@@ -496,3 +496,875 @@ Mamba2는 LSTM 대비 classification 및 regression 성능에서 전반적으로
 특히 TTE와 Entry Heading 예측에서 개선 폭이 확인되어,
 회전교차로 진입 전 시계열 패턴을 표현하는 데 SSM 기반 구조가 효과적으로 동작함을 확인하였다.
 
+---
+
+## 7. 학습 성능 및 추론 효율 비교
+
+LSTM과 Mamba2의 학습 과정 및 추론 성능을 추가로 비교하였다.
+
+---
+
+### 7.1 Validation 학습 곡선
+
+LSTM과 Mamba2의 validation loss와 Time-to-Entry MAE를 비교하였다.
+
+<p align="center">
+  <img src="images/04_training_curves.png" width="1000">
+</p>
+
+<p align="center">
+  <em>LSTM과 Mamba2의 Validation Loss 및 TTE MAE 변화</em>
+</p>
+
+학습 초반에는 두 모델 모두 validation metric의 변동이 존재하였지만,
+학습이 진행될수록 Mamba2의 TTE MAE가 더 낮은 수준으로 수렴하는 경향을 보였다.
+
+최종 test 결과에서도 동일한 경향이 나타났다.
+
+```text
+Full LSTM TTE MAE : 0.1165 s
+Mamba2 TTE MAE    : 0.1058 s
+```
+
+즉, 본 실험 환경에서는 Mamba2가 LSTM보다
+회전교차로 진입 시점 예측에서 더 낮은 오차를 기록하였다.
+
+---
+
+### 7.2 추론 속도 및 메모리 사용량
+
+정확도뿐 아니라 실제 추론 성능도 비교하였다.
+
+비교 항목은 다음과 같다.
+
+- Batch size 1 기준 단일 sample latency
+- Batch size 128 기준 throughput
+- Batch size 128 기준 peak VRAM
+
+<p align="center">
+  <img src="images/03_efficiency_comparison.png" width="1000">
+</p>
+
+<p align="center">
+  <em>LSTM과 Mamba2의 추론 latency, throughput, VRAM 비교</em>
+</p>
+
+측정 결과는 다음과 같다.
+
+| 항목 | LSTM | Mamba2 |
+|---|---:|---:|
+| Parameters | 97,670 | 108,434 |
+| BS=1 Latency | **0.399 ms** | 1.571 ms |
+| BS=128 Throughput | **17,281 samples/s** | 2,567 samples/s |
+| BS=128 Peak VRAM | **350.2 MB** | 629.0 MB |
+
+현재 구현에서는 LSTM이 Mamba2보다 더 빠른 추론 속도와 낮은 메모리 사용량을 보였다.
+
+이는 본 실험에서 Mamba2를 CUDA fused kernel이 아닌
+**non-fused compatibility path**로 실행했기 때문이다.
+
+```text
+use_mem_eff_path = False
+```
+
+따라서 본 결과는 최적화된 Mamba2 구현의 일반적인 속도 특성을 의미하는 것은 아니며,
+본 프로젝트에서 사용한 실제 실행 환경 기준의 측정 결과로 해석하였다.
+
+결론적으로 본 실험에서는
+
+- **예측 성능:** Mamba2가 우수
+- **추론 속도 / 메모리 효율:** LSTM이 우수
+
+한 결과를 보였다.
+
+이후 단계에서는 단순한 temporal backbone 비교를 넘어,
+회전교차로 내부 차량과의 interaction을 명시적으로 반영하기 위해
+Conflict Point와 TTC 기반 feature를 추가하였다.
+
+---
+
+## 8. Conflict Point 및 Conflict Vehicle 분석
+
+Ego+Map LSTM과 Full LSTM의 성능 차이가 크지 않았기 때문에,
+단순히 주변 차량의 raw trajectory를 입력하는 것만으로는
+회전교차로 진입에 중요한 interaction이 충분히 강조되지 않는다고 판단하였다.
+
+따라서 회전교차로 내부 차량과 Ego 차량이 실제로 영향을 주고받는 지점을
+**Conflict Point**로 정의하고,
+현재 시점에서 해당 지점에 접근하는 circulating vehicle을 별도로 탐색하였다.
+
+---
+
+### 8.1 Conflict Point 추정
+
+rounD Dataset에는 각 진입로의 정확한 물리적 conflict point가 별도로 제공되지 않는다.
+
+따라서 본 프로젝트에서는 각 차량이 Entry Line을 통과한 뒤
+약 **0.4초 후의 차량 위치**를 수집하고,
+각 Entry별 대표 위치를 이용하여 data-driven conflict point를 구성하였다.
+
+<p align="center">
+  <img src="images/location0_conflict_geometry.png" width="900">
+</p>
+
+<p align="center">
+  <em>Entry별 추정 Conflict Point와 회전교차로 진행 방향</em>
+</p>
+
+추정된 conflict geometry는 다음과 같다.
+
+| Entry | Conflict Point (x, y) | Median Spread | 90% Spread |
+|---|---|---:|---:|
+| Entry 0 | (81.734, -70.616) | 0.84 m | 1.88 m |
+| Entry 1 | (104.305, -43.256) | 0.80 m | 1.77 m |
+| Entry 2 | (81.743, -23.462) | 0.82 m | 1.92 m |
+| Entry 3 | (57.922, -51.225) | 0.76 m | 1.72 m |
+
+각 Entry에서 crossing 이후의 차량 위치가 비교적 좁은 영역에 모이는 것을 확인하였으며,
+이를 이후 conflict vehicle의 TTC 계산을 위한 대표 지점으로 사용하였다.
+
+> 이 Conflict Point는 실제 도로 설계상의 정확한 충돌지점을 의미하는 것이 아니라,
+> rounD 차량 궤적으로부터 추정한 **data-driven proxy**이다.
+
+---
+
+### 8.2 Conflict Vehicle 매칭
+
+각 decision sample의 현재 frame에서
+회전교차로 내부를 주행 중인 차량 가운데
+Ego 차량의 진입과 가장 직접적인 interaction을 갖는 차량을 찾았다.
+
+Conflict vehicle 후보는 다음 조건을 만족하도록 구성하였다.
+
+```text
+Roundabout ring 주변에 위치
+Circulation tangent 방향과 진행방향이 정렬
+최소 tangential speed >= 0.5 m/s
+Conflict TTC <= 8 s
+```
+
+후보 차량 중 해당 Entry의 Conflict Point에 가장 먼저 도달할 것으로 추정되는 차량을
+대표 conflict vehicle로 선택하였다.
+
+중요한 점은 이 과정에서 **미래 trajectory를 사용하지 않고 현재 frame의 상태만 사용**했다는 것이다.
+
+---
+
+### 8.3 Conflict Vehicle 매칭 QA
+
+추출된 conflict vehicle이 실제로 회전교차로 내부를 따라 이동하며
+해당 Conflict Point 방향으로 접근하는지 시각적으로 검증하였다.
+
+<p align="center">
+  <img src="images/conflict_match_qa.png" width="1000">
+</p>
+
+<p align="center">
+  <em>현재 상태를 이용한 Conflict Vehicle 매칭 결과 예시</em>
+</p>
+
+각 그림에서는
+
+- 주황색 궤적: Ego 차량
+- 보라색 궤적: 선택된 Conflict Vehicle
+- 빨간색 X: Conflict Point
+- 화살표: 현재 차량 진행 방향
+
+을 나타낸다.
+
+QA 결과 선택된 차량이 회전교차로 내부를 따라 이동하며
+예상 Conflict Point 방향으로 접근하는 것을 확인하였다.
+
+---
+
+### 8.4 Conflict Vehicle 통계
+
+전체 107,691개의 decision sample 중
+Conflict Vehicle이 매칭된 sample은 총 **74,203개**였다.
+
+```text
+전체 매칭률 : 68.90%
+```
+
+GO / WAIT 상황별 매칭률은 다음과 같다.
+
+| Decision | Conflict Vehicle 존재 비율 |
+|---|---:|
+| WAIT | 74.89% |
+| GO | 62.18% |
+
+WAIT 상황에서 회전교차로 내부의 conflict vehicle이 존재하는 비율이
+GO 상황보다 더 높게 나타났다.
+
+또한 매칭된 차량의 Conflict TTC를 분석한 결과 다음과 같은 차이가 나타났다.
+
+| Decision | Lead Conflict TTC Median |
+|---|---:|
+| WAIT | 2.18 s |
+| GO | 3.42 s |
+
+WAIT 상황에서는 circulating vehicle이 Conflict Point에 더 빠르게 접근하고 있었으며,
+GO 상황에서는 상대적으로 더 큰 시간적 여유가 존재하였다.
+
+이 결과를 바탕으로 다음 단계에서는
+Ego와 Conflict Vehicle의 **TTC 및 temporal gap을 수치화하여 모델 입력 feature로 추가**하였다.
+
+---
+
+## 9. TTC / Temporal Gap 기반 Interaction Feature
+
+Conflict Vehicle을 매칭한 이후에는
+Ego 차량과 회전교차로 내부 차량의 상대적인 도착 관계를 수치화하였다.
+
+단순히 주변 차량의 위치와 속도를 입력하는 것보다,
+두 차량이 동일한 Conflict Point에 **언제 도달하는지**를 직접 표현하면
+회전교차로 진입 interaction을 더 명확하게 나타낼 수 있다고 판단하였다.
+
+---
+
+### 9.1 Interaction Feature 구성
+
+각 decision sample의 현재 시점에서
+Ego 차량과 Conflict Vehicle의 상태를 이용하여 다음 feature를 계산하였다.
+
+```text
+egoDistToConflict
+egoClosingSpeed
+egoApproachAlignment
+egoCvTTC
+
+leadPresent
+leadSpeed
+leadArcDistance
+leadConflictTTC
+
+signedTTCGap
+conflictOccupied
+```
+
+총 **10개의 interaction feature**를 최종 모델 입력으로 사용하였다.
+
+각 feature의 의미는 다음과 같다.
+
+| Feature | 의미 |
+|---|---|
+| egoDistToConflict | Ego와 Conflict Point 사이 거리 |
+| egoClosingSpeed | Ego의 Conflict Point 방향 접근 속도 |
+| egoApproachAlignment | Ego 진행 방향과 Conflict Point 접근 방향의 정렬 정도 |
+| egoCvTTC | Ego가 현재 속도를 유지한다고 가정했을 때의 TTC |
+| leadPresent | Conflict Vehicle 존재 여부 |
+| leadSpeed | Conflict Vehicle 속도 |
+| leadArcDistance | 회전교차로를 따라 Conflict Point까지 남은 거리 |
+| leadConflictTTC | Conflict Vehicle의 Conflict Point 도달 예상 시간 |
+| signedTTCGap | Lead TTC - Ego TTC |
+| conflictOccupied | Conflict Point 주변에 차량이 존재하는지 여부 |
+
+모든 feature는 **현재 frame에서 관측 가능한 정보와 고정된 geometry만을 사용하여 계산**하였다.
+
+따라서 학습 label이나 미래 trajectory 정보는 interaction feature 생성에 사용하지 않았다.
+
+---
+
+### 9.2 Signed TTC Gap
+
+가장 중요한 feature 중 하나로 다음 값을 사용하였다.
+
+```text
+signedTTCGap = Lead Conflict TTC - Ego TTC
+```
+
+값의 해석은 다음과 같다.
+
+```text
+signedTTCGap < 0
+→ Conflict Vehicle이 Ego보다 먼저 Conflict Point에 도달할 가능성이 높음
+
+signedTTCGap > 0
+→ Ego가 Conflict Vehicle보다 먼저 Conflict Point에 도달할 시간적 여유가 존재
+```
+
+GO / WAIT sample을 비교한 결과 다음과 같은 차이가 나타났다.
+
+| 항목 | WAIT | GO |
+|---|---:|---:|
+| Ego CV-TTC Median | 7.63 s | 1.91 s |
+| Lead Conflict TTC Median | 2.18 s | 3.42 s |
+| Signed TTC Gap Median | **-4.84 s** | **+1.67 s** |
+| Conflict Occupancy | 20.28% | 10.15% |
+
+특히 Signed TTC Gap은 WAIT와 GO에서 부호 자체가 다르게 나타났다.
+
+WAIT 상황에서는 Conflict Vehicle이 Ego보다 먼저 Conflict Point에 도달하는 경우가 많았고,
+GO 상황에서는 Ego가 먼저 진입할 수 있는 시간적 여유가 상대적으로 크게 나타났다.
+
+이 결과를 통해 TTC / Gap 정보가
+회전교차로 진입 행동과 뚜렷한 통계적 관계를 갖는 것을 확인하였다.
+
+다만 이는 두 변수 사이의 **통계적 관계**를 나타내는 것이며,
+TTC Gap이 운전자의 진입 판단을 직접적으로 발생시킨다는 인과관계를 의미하지는 않는다.
+
+---
+
+### 9.3 Interaction Feature 정규화
+
+Interaction feature는 Train split의 통계량만을 사용하여 정규화하였다.
+
+이를 통해 Validation / Test 정보가 학습 과정에 유입되지 않도록 하였다.
+
+Conflict Vehicle이 존재하지 않는 sample의 경우에는
+`leadPresent`를 제외한 lead vehicle 관련 feature를 중립값으로 처리하였다.
+
+---
+
+### 9.4 Naive Interaction Fusion
+
+처음에는 기존 scene representation에 interaction feature를 직접 결합하는
+일반적인 fusion 구조를 적용하였다.
+
+```text
+Trajectory Feature
+        +
+Interaction Feature
+        ↓
+   Feature Fusion
+        ↓
+Prediction Heads
+```
+
+하지만 결과는 오히려 기존 모델보다 일부 metric에서 성능이 감소하였다.
+
+| Model | F1 | TTE MAE | Speed MAE | Heading MAE |
+|---|---:|---:|---:|---:|
+| Full LSTM | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
+| Naive Interaction LSTM | 0.9952 | 0.1308 s | 0.4280 m/s | 2.885° |
+
+Interaction 정보 자체는 GO / WAIT 상황에서 명확한 차이를 보였지만,
+이를 기존 scene representation에 강하게 결합하는 방식은
+이미 학습된 trajectory representation을 오히려 방해할 수 있다고 판단하였다.
+
+---
+
+### 9.5 Residual Interaction 방식
+
+이를 해결하기 위해 interaction 정보를
+기존 scene representation을 대체하는 정보가 아니라
+**작은 보정값(residual correction)**으로 사용하였다.
+
+구조는 다음과 같다.
+
+```text
+Base Scene Feature
+        │
+        ├──────────────────┐
+        │                  │
+        │        Interaction Features
+        │                  │
+        │        Interaction Encoder
+        │                  │
+        │              Correction
+        │                  │
+        └──── Base + α × Correction
+                           │
+                           ▼
+                  Final Scene Feature
+```
+
+최종 scene feature는 다음 형태로 구성하였다.
+
+```text
+Final Feature
+=
+Base Feature
++
+α × Interaction Correction
+```
+
+`α`는 학습 가능한 parameter이며,
+초기값을 0으로 설정하여 기존 모델의 출력이 그대로 유지되도록 하였다.
+
+즉, interaction 정보가 실제로 도움이 되는 경우에만
+학습 과정에서 residual correction의 영향이 증가하도록 구성하였다.
+
+---
+
+### 9.6 Residual Interaction 결과
+
+#### LSTM
+
+| Model | F1 | TTE MAE | Speed MAE | Heading MAE |
+|---|---:|---:|---:|---:|
+| Full LSTM | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
+| Residual Interaction LSTM | 0.9958 | **0.1136 s** | **0.3727 m/s** | **2.711°** |
+
+기존 classification 성능을 유지하면서 regression metric이 소폭 개선되었다.
+
+#### Mamba2
+
+| Model | F1 | TTE MAE | Speed MAE | Heading MAE |
+|---|---:|---:|---:|---:|
+| Mamba2 Baseline | 0.9968 | 0.1058 s | 0.3453 m/s | 2.411° |
+| Residual Interaction Mamba2 | **0.9971** | **0.1024 s** | 0.3456 m/s | **2.384°** |
+
+Residual Interaction Mamba2는 Test set에서 다음 confusion matrix를 기록하였다.
+
+| | Pred WAIT | Pred GO |
+|---|---:|---:|
+| True WAIT | 7,086 | 21 |
+| True GO | 15 | 6,174 |
+
+총 13,296개의 Test sample 중 오분류는 36개였다.
+
+최종적으로 본 프로젝트에서는
+
+> **raw multi-agent trajectory를 주요 정보로 사용하고,  
+> TTC / Gap 기반 interaction 정보를 residual correction으로 보조하는 구조**
+
+를 최종 interaction 모델로 선택하였다.
+
+---
+
+## 10. 미래 4초 주행 궤적 예측
+
+진입 여부와 진입 시점만 예측하는 것에서 끝내지 않고,
+실제 **주행계획(Driving Plan)**에 가까운 출력을 만들기 위해
+향후 4초 동안의 미래 주행 궤적도 함께 예측하도록 모델을 확장하였다.
+
+---
+
+### 10.1 Future Trajectory Target 구성
+
+각 decision sample의 현재 Ego pose를 기준으로
+향후 4초 동안의 실제 차량 위치를 Ego-centric 좌표계로 변환하였다.
+
+Trajectory target은 다음 조건으로 생성하였다.
+
+```text
+Prediction horizon : 4.0 s
+Sampling interval  : 0.2 s
+Future steps       : 20
+Output shape       : [20, 2]
+```
+
+즉, 현재 시점 이후
+
+```text
+0.2 s
+0.4 s
+0.6 s
+...
+4.0 s
+```
+
+까지 총 20개의 미래 waypoint를 예측한다.
+
+<p align="center">
+  <img src="images/future_trajectory_targets.png" width="1000">
+</p>
+
+<p align="center">
+  <em>과거 2초 Ego trajectory와 향후 4초 Ground Truth trajectory target 예시</em>
+</p>
+
+분석 결과 대부분의 sample에서 4초 future trajectory가 정상적으로 존재하였으며,
+본 프로젝트의 TTE 범위인 0.4~4.0초 구간을 모두 포함할 수 있었다.
+
+---
+
+### 10.2 Trajectory Head 추가
+
+기존 Residual Interaction Mamba2 모델의 scene representation에
+별도의 trajectory prediction head를 추가하였다.
+
+전체 구조는 다음과 같다.
+
+```text
+Ego / Neighbor History
+        ↓
+      Mamba2
+        ↓
+Multi-agent Scene Feature
+        ↓
+Residual Interaction Correction
+        ↓
+Final Scene Representation
+        │
+        ├── GO / WAIT
+        ├── Time-to-Entry
+        ├── Entry Speed
+        ├── Entry Heading
+        └── Future Trajectory [20 x 2]
+```
+
+Trajectory head는 최종 scene feature로부터
+40개의 값을 출력한 뒤 `[20, 2]` 형태로 reshape하도록 구성하였다.
+
+기존 모델의 decision 성능이 손상되지 않도록
+trajectory 학습 단계에서는 기존 backbone과 prediction head를 고정하고,
+trajectory head만 추가 학습하였다.
+
+그 결과 기존 decision 성능은 그대로 유지되었다.
+
+```text
+Accuracy        : 99.73%
+F1              : 0.9971
+TTE MAE         : 0.1024 s
+Entry Speed MAE : 0.3456 m/s
+Entry Heading   : 2.384°
+```
+
+---
+
+### 10.3 Trajectory 평가 지표
+
+미래 궤적 예측 성능은 다음 두 지표를 사용하였다.
+
+#### ADE (Average Displacement Error)
+
+전체 미래 waypoint에서
+예측 위치와 실제 위치 사이의 평균 Euclidean distance를 계산한다.
+
+```text
+ADE = 전체 미래 시점의 평균 위치 오차
+```
+
+#### FDE (Final Displacement Error)
+
+마지막 미래 waypoint에서
+예측 위치와 실제 위치 사이의 Euclidean distance를 계산한다.
+
+```text
+FDE = 마지막 시점의 위치 오차
+```
+
+본 프로젝트에서는 마지막 시점이 약 4초 후의 위치에 해당한다.
+
+---
+
+### 10.4 Constant Velocity Baseline
+
+Trajectory prediction 성능을 비교하기 위해
+현재 Ego 속도가 그대로 유지된다고 가정하는
+Constant Velocity(CV) baseline을 구성하였다.
+
+```text
+x(t) = vx × t
+y(t) = vy × t
+```
+
+즉, 차량이 현재 속도와 진행 방향을 유지한다고 가정하여
+향후 4초의 위치를 계산하였다.
+
+Test set 결과는 다음과 같다.
+
+| Model | ADE ↓ | FDE ↓ |
+|---|---:|---:|
+| Constant Velocity | 3.5826 m | 9.1725 m |
+| **Final Mamba2** | **0.7742 m** | **1.8905 m** |
+
+<p align="center">
+  <img src="images/02_trajectory_comparison.png" width="750">
+</p>
+
+<p align="center">
+  <em>Constant Velocity baseline과 Final Mamba2의 4초 미래 궤적 예측 오차 비교</em>
+</p>
+
+Constant Velocity baseline 대비 Final Mamba2의 오차 감소율은 다음과 같다.
+
+```text
+ADE reduction : 78.39%
+FDE reduction : 79.39%
+```
+
+단순히 현재 속도를 유지하는 방식과 비교했을 때
+회전교차로의 곡률과 진입 이후의 주행 방향을 학습한 모델이
+미래 trajectory를 훨씬 정확하게 예측하는 것을 확인하였다.
+
+---
+
+### 10.5 Test Sample 예측 결과
+
+최종 모델의 trajectory prediction을 실제 Test sample과 비교하였다.
+
+<p align="center">
+  <img src="images/final_mamba_test_predictions.png" width="1100">
+</p>
+
+<p align="center">
+  <em>Test set의 Ground Truth와 Final Mamba2 미래 궤적 예측 결과</em>
+</p>
+
+각 sample에는 다음 정보가 함께 표시된다.
+
+- 과거 2초 Ego trajectory
+- Ground Truth future trajectory
+- Mamba2 predicted future trajectory
+- Entry Line
+- Conflict Point
+- Ground Truth GO / WAIT
+- Predicted GO / WAIT
+- GO probability
+- Ground Truth / Predicted TTE
+- ADE
+- FDE
+
+TTE가 짧은 GO 상황부터
+진입까지 시간이 많이 남은 WAIT 상황까지
+다양한 sample에서 예측 trajectory가 실제 궤적을 전반적으로 따라가는 것을 확인하였다.
+
+이를 통해 최종 모델이 단순한 진입 판단을 넘어
+향후 차량의 실제 이동 방향까지 함께 예측할 수 있음을 확인하였다.
+
+---
+
+## 11. 최종 성능 비교 및 결과 정리
+
+지금까지 구성한 Kinematic baseline, LSTM, Mamba2 및
+Residual Interaction 기반 최종 모델의 성능을 비교하였다.
+
+최종 평가는 recording-level split으로 분리된
+**Test set 13,296 samples**를 기준으로 수행하였다.
+
+---
+
+### 11.1 전체 모델 성능 비교
+
+| Model | F1 ↑ | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ |
+|---|---:|---:|---:|---:|
+| Kinematic | 0.8919 | 1.6351 s | 2.1481 m/s | 15.252° |
+| Ego+Map LSTM | 0.9950 | 0.1234 s | 0.3929 m/s | 2.705° |
+| Full LSTM | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
+| Mamba2 Baseline | 0.9968 | 0.1058 s | **0.3453 m/s** | 2.411° |
+| Residual Interaction LSTM | 0.9958 | 0.1136 s | 0.3727 m/s | 2.711° |
+| **Final Mamba2** | **0.9971** | **0.1024 s** | 0.3456 m/s | **2.384°** |
+
+<p align="center">
+  <img src="images/01_core_model_comparison.png" width="1000">
+</p>
+
+<p align="center">
+  <em>Kinematic, LSTM, Mamba2 모델의 진입 판단 및 주행계획 예측 성능 비교</em>
+</p>
+
+Kinematic baseline과 비교했을 때
+시계열 기반 LSTM과 Mamba2 모델은 모든 예측 항목에서 큰 성능 향상을 보였다.
+
+또한 동일한 multi-agent 입력을 사용한 Full LSTM과 Mamba2를 비교했을 때
+Mamba2가 전반적으로 더 낮은 regression error와 높은 F1-score를 기록하였다.
+
+---
+
+### 11.2 Full LSTM 대비 Final Mamba2
+
+Full LSTM과 최종 Mamba2 모델의 성능을 직접 비교하면 다음과 같다.
+
+```text
+F1-score
+0.9958 -> 0.9971
+
+TTE MAE
+0.1165 s -> 0.1024 s
+
+Entry Speed MAE
+0.3773 m/s -> 0.3456 m/s
+
+Entry Heading MAE
+2.747° -> 2.384°
+```
+
+오차 감소율은 다음과 같다.
+
+| Metric | 감소율 |
+|---|---:|
+| TTE MAE | **12.10% 감소** |
+| Entry Speed MAE | **8.40% 감소** |
+| Entry Heading MAE | **13.21% 감소** |
+
+이를 통해 본 실험에서는
+Mamba2 기반 temporal encoder가 LSTM보다
+회전교차로 진입 전의 시계열 패턴을 더 정확하게 표현하는 결과를 확인하였다.
+
+---
+
+### 11.3 Interaction 정보의 효과
+
+Mamba2 Baseline과 Residual Interaction Mamba2를 비교하면 다음과 같다.
+
+| Metric | Mamba2 Baseline | Final Mamba2 |
+|---|---:|---:|
+| F1-score | 0.9968 | **0.9971** |
+| TTE MAE | 0.1058 s | **0.1024 s** |
+| Entry Speed MAE | **0.3453 m/s** | 0.3456 m/s |
+| Entry Heading MAE | 2.411° | **2.384°** |
+
+Interaction feature를 추가했을 때
+성능 변화 폭 자체는 크지 않았다.
+
+이는 raw multi-agent trajectory가 이미 진입 행동과 관련된 대부분의 정보를 포함하고 있으며,
+TTC와 temporal gap 정보는 이를 완전히 대체하기보다는
+**추가적인 보정 정보로 활용되는 것이 적절함**을 의미한다.
+
+실제로 naive interaction fusion은 성능을 저하시켰지만,
+residual correction 방식에서는 기존 성능을 유지하면서
+F1, TTE, Heading metric이 소폭 개선되었다.
+
+---
+
+### 11.4 최종 모델 출력
+
+최종 모델은 하나의 입력으로부터 다음 5개의 결과를 동시에 예측한다.
+
+```text
+1. GO / WAIT
+2. Time-to-Entry
+3. Entry Speed
+4. Entry Heading
+5. Future Trajectory (4 s)
+```
+
+최종 Test 성능은 다음과 같다.
+
+| 항목 | 결과 |
+|---|---:|
+| Accuracy | **99.73%** |
+| F1-score | **0.9971** |
+| TTE MAE | **0.1024 s** |
+| Entry Speed MAE | **0.3456 m/s** |
+| Entry Heading MAE | **2.384°** |
+| Trajectory ADE | **0.7742 m** |
+| Trajectory FDE | **1.8905 m** |
+
+GO / WAIT classification의 confusion matrix는 다음과 같다.
+
+| | Pred WAIT | Pred GO |
+|---|---:|---:|
+| True WAIT | 7,086 | 21 |
+| True GO | 15 | 6,174 |
+
+총 13,296개의 Test sample 중 36개가 오분류되었다.
+
+---
+
+### 11.5 최종 모델 구조 요약
+
+```text
+Ego + Neighbor Past Trajectory (2 s)
+                │
+                ▼
+              Mamba2
+                │
+                ▼
+       Multi-agent Representation
+                │
+                ├──────────────────────┐
+                │                      │
+                │              TTC / Temporal Gap
+                │                      │
+                │            Interaction Encoder
+                │                      │
+                └────── Residual Correction
+                           │
+                           ▼
+                 Final Scene Feature
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+          ▼                ▼                ▼
+       GO / WAIT          TTE          Entry Speed
+                                             │
+                           ┌─────────────────┴─────────────┐
+                           ▼                               ▼
+                    Entry Heading                 Future Trajectory
+```
+
+최종적으로 본 프로젝트에서는
+**Mamba2 기반 시계열 표현을 중심으로 주변 차량의 interaction 정보를 residual 방식으로 보완하고,
+진입 판단과 미래 주행 궤적을 동시에 예측하는 multi-task framework**를 구성하였다.
+
+---
+
+## 12. rounD Offline Replay 시연
+
+최종 모델의 예측 결과를 실제 rounD 항공영상 위에서 확인하기 위해
+offline replay visualization을 구성하였다.
+
+Test recording의 실제 배경 이미지 위에 현재 주변 차량 상태와
+Ego 차량의 과거 궤적, 미래 Ground Truth, Mamba2 예측 궤적을 함께 표시하였다.
+
+<p align="center">
+  <img src="images/round_replay_rec05_track395.gif" width="1000">
+</p>
+
+<p align="center">
+  <em>rounD 실제 항공영상 위 Final Mamba2 예측 replay</em>
+</p>
+
+Replay에는 다음 정보가 함께 표시된다.
+
+- 현재 주변 차량 위치
+- Ego 차량 현재 위치
+- Ego 과거 2초 궤적
+- Ground Truth 미래 4초 궤적
+- Final Mamba2 미래 4초 예측 궤적
+- Entry Line
+- Conflict Point
+- Ground Truth GO / WAIT
+- Predicted GO / WAIT
+- GO probability
+- Ground Truth / Predicted Time-to-Entry
+- Lead Conflict Vehicle TTC
+- Signed TTC Gap
+- ADE / FDE
+
+이 시각화를 통해 모델이 단순히 수치 결과만 출력하는 것이 아니라,
+실제 회전교차로 환경에서
+
+```text
+현재 상태 인식
+→ 진입 여부 판단
+→ 진입 시점 예측
+→ 향후 주행 방향 예측
+```
+
+의 흐름을 하나의 시스템으로 수행하는 것을 확인할 수 있다.
+
+---
+
+### 12.1 Replay 예시 해석
+
+위 예시에서는 Ego 차량이 회전교차로 진입로에 접근하면서
+시간이 지남에 따라 WAIT 상태에서 GO 상태로 전환되는 과정을 확인할 수 있다.
+
+각 frame에서 모델은 과거 2초 동안의 차량 움직임과
+현재 Conflict Vehicle 정보를 입력으로 사용하여
+진입 의사결정과 향후 4초의 주행 궤적을 동시에 예측한다.
+
+Predicted trajectory는 실제 Ground Truth trajectory와 유사한 곡률을 따라가며,
+회전교차로 진입 이후의 진행 방향까지 예측하는 모습을 확인할 수 있다.
+
+---
+
+### 12.2 최종 시연 목적
+
+본 Replay는 실시간 closed-loop autonomous driving system을 구현한 것은 아니다.
+
+rounD Dataset에 기록된 실제 교통상황을 기반으로
+최종 모델의 예측 결과를 시각적으로 검증하기 위한
+**offline prediction demo**로 구성하였다.
+
+따라서 본 프로젝트의 최종 범위는 다음과 같다.
+
+```text
+Real-world recorded trajectory
+        ↓
+Offline model inference
+        ↓
+Entry decision prediction
+        ↓
+Driving plan prediction
+        ↓
+Visualization
+```
+
+CARLA나 실제 차량 제어를 포함하지 않고,
+rounD Dataset 기반의 회전교차로 진입 판단 및 주행계획 예측 모델 개발과 검증에 초점을 맞추었다.
