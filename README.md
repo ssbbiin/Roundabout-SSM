@@ -53,11 +53,10 @@ rounD Dataset은 RWTH Aachen University의
 **Institute for Automotive Engineering (ika)**에서 구축한
 독일 회전교차로 기반 실제 도로 이용자 궤적 데이터셋이다.
 
-드론 촬영을 통해 차량, 자전거, 보행자 등의 자연스러운 주행 궤적을 수집했으며,
-위치, 속도, 가속도, heading 등의 정보를 제공한다.
+드론 촬영을 기반으로 차량, 자전거, 보행자, 오토바이 등의 실제 주행 궤적을 제공하며,
+본 프로젝트에서는 차량의 위치, 속도, 가속도, heading 정보를 활용하였다.
 
 - 공식 페이지: https://levelxdata.com/round-dataset/
-- 데이터셋 논문: *The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany*
 
 ### 데이터 구성
 
@@ -1429,8 +1428,11 @@ Roundabout-SSM/
 - [최종 예측 시각화](scripts/40_visualize_final_predictions.py)
 - [rounD Replay 생성](scripts/41_make_round_replay.py)
 
+---
+
 ## Reference
 
-Krajewski, R., Moers, T., Bock, J., Vater, L., & Eckstein, L.  
-**The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany.**  
-IEEE ITSC, 2020.
+R. Krajewski, T. Moers, J. Bock, L. Vater, and L. Eckstein,  
+**"The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany,"**  
+2020 IEEE 23rd International Conference on Intelligent Transportation Systems (ITSC), pp. 1–6, 2020.  
+DOI: 10.1109/ITSC45102.2020.9294728
