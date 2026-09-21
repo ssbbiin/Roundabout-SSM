@@ -45,19 +45,6 @@ rounD Dataset은 차량별 위치, 속도, 가속도, 진행방향(heading) 등�
 전체 24개 recording 중 동일한 회전교차로를 공유하는 **Location 0의 recording 02~23**을
 주 학습 및 평가 대상으로 사용하였다.
 
-### 데이터셋 출처
-
-본 프로젝트에서는 **rounD Dataset**을 사용하였다.
-
-rounD Dataset은 RWTH Aachen University의
-**Institute for Automotive Engineering (ika)**에서 구축한
-독일 회전교차로 기반 실제 도로 이용자 궤적 데이터셋이다.
-
-드론 촬영을 기반으로 차량, 자전거, 보행자, 오토바이 등의 실제 주행 궤적을 제공하며,
-본 프로젝트에서는 차량의 위치, 속도, 가속도, heading 정보를 활용하였다.
-
-- 공식 페이지: https://levelxdata.com/round-dataset/
-
 ### 데이터 구성
 
 | 항목 | 값 |
@@ -1436,3 +1423,15 @@ R. Krajewski, T. Moers, J. Bock, L. Vater, and L. Eckstein,
 **"The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany,"**  
 2020 IEEE 23rd International Conference on Intelligent Transportation Systems (ITSC), pp. 1–6, 2020.  
 DOI: 10.1109/ITSC45102.2020.9294728
+
+---
+
+## Dataset
+
+- **rounD Dataset**
+- Provider: RWTH Aachen University, Institute for Automotive Engineering (ika)
+- Official Page: https://levelxdata.com/round-dataset/
+- Paper: *The rounD Dataset: A Drone Dataset of Road User Trajectories at Roundabouts in Germany*
+- Authors: R. Krajewski, T. Moers, J. Bock, L. Vater, L. Eckstein
+- Conference: IEEE ITSC 2020
+- DOI: 10.1109/ITSC45102.2020.9294728
