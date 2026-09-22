@@ -1308,7 +1308,7 @@ Test recording의 실제 배경 이미지 위에 현재 주변 차량 상태와
 Ego 차량의 과거 궤적, 미래 Ground Truth, Mamba2 예측 궤적을 함께 표시하였다.
 
 <p align="center">
-  <img src="images/round_replay_rec05_track395.gif" width="1000">
+<img src="images/round_replay_rec05_track395_full.gif" width="1000">
 </p>
 
 <p align="center">
