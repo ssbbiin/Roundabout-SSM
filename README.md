@@ -456,8 +456,65 @@ Ego+Map 모델과의 차이는 크지 않았다.
 TTC와 temporal gap 정보를 추가로 분석하였다.
 
 ---
+### 6.4 Transformer Baseline
 
-### 6.4 Mamba2 Baseline
+Attention 기반 sequence model과의 비교를 위해
+동일한 입력 및 multi-task prediction 구조에서 Transformer baseline을 추가하였다.
+
+Transformer와 Mamba2의 모델 규모를 최대한 유사하게 구성하여
+temporal encoder 구조의 차이를 비교할 수 있도록 하였다.
+
+주요 설정은 다음과 같다.
+
+```text
+d_model         = 64
+Attention Heads = 4
+Encoder Layers  = 2
+Feedforward Dim = 128
+History Length  = 50 frames
+```
+
+Self-Attention은 입력 frame의 순서를 자체적으로 표현하지 못하기 때문에
+Learned Positional Embedding을 추가하였다.
+
+또한 과거 시계열을 기반으로 현재 상태를 표현하는 LSTM 및 Mamba2와의
+비교 조건을 맞추기 위해 Causal Self-Attention Mask를 적용하였다.
+
+모델 규모는 다음과 같다.
+
+| Model | Parameters |
+|---|---:|
+| LSTM | 97,670 |
+| Transformer | 109,958 |
+| Mamba2 | 108,434 |
+
+특히 Transformer와 Mamba2의 parameter 차이는 약 1.4%로,
+유사한 model capacity에서 Attention 기반 구조와 SSM 기반 구조를 비교하였다.
+
+Test 결과는 다음과 같다.
+
+| Metric | Transformer |
+|---|---:|
+| Accuracy | 99.28% |
+| Precision | 0.9926 |
+| Recall | 0.9919 |
+| F1-score | 0.9922 |
+| TTE MAE | 0.1311 s |
+| Entry Speed MAE | 0.4092 m/s |
+| Entry Heading MAE | 2.798° |
+
+동일한 데이터와 학습 조건에서 Transformer 역시 높은 예측 성능을 보였으나,
+본 실험에서는 LSTM과 Mamba2보다 전반적으로 높은 regression error를 기록하였다.
+
+<p align="center">
+  <img src="images/02_parameter_comparison.png" width="700">
+</p>
+
+<p align="center">
+  <em>LSTM, Transformer, Mamba2의 모델 파라미터 수 비교</em>
+</p>
+
+### 6.5 Mamba2 Baseline
 
 SSM 기반 temporal encoder의 성능을 확인하기 위해
 LSTM과 동일한 입력 및 pooling 구조에서 Mamba2 기반 모델을 구현하였다.
@@ -516,86 +573,134 @@ Mamba2는 LSTM 대비 classification 및 regression 성능에서 전반적으로
 
 ## 7. 학습 성능 및 추론 효율 비교
 
-LSTM과 Mamba2의 학습 과정 및 추론 성능을 추가로 비교하였다.
+LSTM, Transformer, Mamba2의 학습 과정과 실제 추론 성능을 비교하였다.
+
+세 모델은 동일한 rounD Dataset split과 동일한 multi-task prediction head를 사용하였으며,
+temporal encoder 구조만 다르게 구성하였다.
 
 ---
 
 ### 7.1 Validation 학습 곡선
 
-LSTM과 Mamba2의 validation loss와 Time-to-Entry MAE를 비교하였다.
+세 모델의 Validation Loss와 Time-to-Entry MAE 변화를 비교하였다.
 
 <p align="center">
-  <img src="images/04_training_curves.png" width="1000">
+  <img src="images/04_lstm_transformer_mamba_training.png" width="1000">
 </p>
 
 <p align="center">
-  <em>LSTM과 Mamba2의 Validation Loss 및 TTE MAE 변화</em>
+  <em>LSTM, Transformer, Mamba2의 Validation Loss 및 TTE MAE 변화</em>
 </p>
 
-학습 초반에는 두 모델 모두 validation metric의 변동이 존재하였지만,
-학습이 진행될수록 Mamba2의 TTE MAE가 더 낮은 수준으로 수렴하는 경향을 보였다.
+학습 초기에는 세 모델 모두 validation metric의 변동이 나타났지만,
+학습 후반에는 Mamba2가 가장 낮은 수준의 TTE validation error를 보였다.
 
-최종 test 결과에서도 동일한 경향이 나타났다.
+최종 Test 결과의 TTE MAE는 다음과 같다.
 
-```text
-Full LSTM TTE MAE : 0.1165 s
-Mamba2 TTE MAE    : 0.1058 s
-```
+| Model | TTE MAE ↓ |
+|---|---:|
+| LSTM | 0.1165 s |
+| Transformer | 0.1311 s |
+| Mamba2 | **0.1058 s** |
 
-즉, 본 실험 환경에서는 Mamba2가 LSTM보다
-회전교차로 진입 시점 예측에서 더 낮은 오차를 기록하였다.
+본 실험에서는 Mamba2가 LSTM과 Transformer보다
+더 낮은 Time-to-Entry 예측 오차를 기록하였다.
 
 ---
 
-### 7.2 추론 속도 및 메모리 사용량
+### 7.2 모델 규모 비교
 
-정확도뿐 아니라 실제 추론 성능도 비교하였다.
+세 모델의 parameter 수는 다음과 같다.
 
-비교 항목은 다음과 같다.
-
-- Batch size 1 기준 단일 sample latency
-- Batch size 128 기준 throughput
-- Batch size 128 기준 peak VRAM
+| Model | Parameters |
+|---|---:|
+| LSTM | 97,670 |
+| Transformer | 109,958 |
+| Mamba2 | 108,434 |
 
 <p align="center">
-  <img src="images/03_efficiency_comparison.png" width="1000">
+  <img src="images/02_parameter_comparison.png" width="700">
 </p>
 
 <p align="center">
-  <em>LSTM과 Mamba2의 추론 latency, throughput, VRAM 비교</em>
+  <em>LSTM, Transformer, Mamba2의 parameter 수 비교</em>
 </p>
 
-측정 결과는 다음과 같다.
+Transformer와 Mamba2는 각각 109,958개와 108,434개의 parameter를 가지며,
+두 모델의 parameter 차이는 약 1.4%이다.
 
-| 항목 | LSTM | Mamba2 |
-|---|---:|---:|
-| Parameters | 97,670 | 108,434 |
-| BS=1 Latency | **0.399 ms** | 1.571 ms |
-| BS=128 Throughput | **17,281 samples/s** | 2,567 samples/s |
-| BS=128 Peak VRAM | **350.2 MB** | 629.0 MB |
+따라서 Attention 기반 Transformer와 SSM 기반 Mamba2를
+유사한 model capacity에서 비교할 수 있도록 구성하였다.
 
-현재 구현에서는 LSTM이 Mamba2보다 더 빠른 추론 속도와 낮은 메모리 사용량을 보였다.
+---
 
-이는 본 실험에서 Mamba2를 CUDA fused kernel이 아닌
-**non-fused compatibility path**로 실행했기 때문이다.
+### 7.3 추론 속도 및 메모리 사용량
+
+NVIDIA GeForce RTX 2050 환경에서
+세 모델의 latency, throughput, peak VRAM을 측정하였다.
+
+<p align="center">
+  <img src="images/03_lstm_transformer_mamba_efficiency.png" width="1000">
+</p>
+
+<p align="center">
+  <em>LSTM, Transformer, Mamba2의 추론 latency, throughput, VRAM 비교</em>
+</p>
+
+Batch Size 128 기준 결과는 다음과 같다.
+
+| Model | Sample Latency ↓ | Throughput ↑ | Peak VRAM ↓ |
+|---|---:|---:|---:|
+| LSTM | **0.0574 ms** | **17,420.9 samples/s** | 349.8 MB |
+| Transformer | 0.2318 ms | 4,314.6 samples/s | **193.9 MB** |
+| Mamba2 | 0.4095 ms | 2,442.0 samples/s | 629.3 MB |
+
+본 구현 환경에서는
+
+- 추론 속도는 LSTM이 가장 우수하였고,
+- VRAM 사용량은 Transformer가 가장 낮았으며,
+- Mamba2는 예측 성능은 가장 높았지만 추론 효율은 가장 낮게 측정되었다.
+
+Mamba2는 현재 CUDA extension 호환성 문제로
+다음 설정의 non-fused compatibility path를 사용하였다.
 
 ```text
 use_mem_eff_path = False
 ```
 
-따라서 본 결과는 최적화된 Mamba2 구현의 일반적인 속도 특성을 의미하는 것은 아니며,
-본 프로젝트에서 사용한 실제 실행 환경 기준의 측정 결과로 해석하였다.
+따라서 본 추론 효율 결과는
+최적화된 Mamba2 구현의 일반적인 성능을 의미하는 것이 아니라,
+본 프로젝트에서 사용한 실제 실행 환경 기준의 측정 결과이다.
 
-결론적으로 본 실험에서는
+---
 
-- **예측 성능:** Mamba2가 우수
-- **추론 속도 / 메모리 효율:** LSTM이 우수
+### 7.4 Prediction 성능 비교
 
-한 결과를 보였다.
+세 temporal encoder의 최종 Test 성능은 다음과 같다.
 
-이후 단계에서는 단순한 temporal backbone 비교를 넘어,
-회전교차로 내부 차량과의 interaction을 명시적으로 반영하기 위해
-Conflict Point와 TTC 기반 feature를 추가하였다.
+<p align="center">
+  <img src="images/01_lstm_transformer_mamba_performance.png" width="1000">
+</p>
+
+<p align="center">
+  <em>LSTM, Transformer, Mamba2의 진입 판단 및 주행계획 예측 성능 비교</em>
+</p>
+
+| Model | F1 ↑ | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ |
+|---|---:|---:|---:|---:|
+| LSTM | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
+| Transformer | 0.9922 | 0.1311 s | 0.4092 m/s | 2.798° |
+| **Mamba2** | **0.9968** | **0.1058 s** | **0.3453 m/s** | **2.411°** |
+
+유사한 parameter 규모의 Transformer와 Mamba2를 비교했을 때,
+본 rounD 기반 실험에서는 Mamba2가 F1-score와 모든 regression metric에서
+더 좋은 결과를 기록하였다.
+
+다만 이는 본 Dataset, 모델 크기 및 학습 조건에서의 실험 결과이며,
+특정 sequence architecture가 일반적으로 다른 구조보다 항상 우수하다는 것을 의미하지 않는다.
+
+이후 단계에서는 가장 좋은 prediction 성능을 보인 Mamba2를 기반으로
+회전교차로 내부 차량과의 TTC 및 Temporal Gap 정보를 추가하였다.
 
 ---
 
@@ -1135,7 +1240,7 @@ TTE가 짧은 GO 상황부터
 
 ## 11. 최종 성능 비교 및 결과 정리
 
-지금까지 구성한 Kinematic baseline, LSTM, Mamba2 및
+지금까지 구성한 Kinematic baseline, LSTM, Transformer, Mamba2 및
 Residual Interaction 기반 최종 모델의 성능을 비교하였다.
 
 최종 평가는 recording-level split으로 분리된
@@ -1145,60 +1250,57 @@ Residual Interaction 기반 최종 모델의 성능을 비교하였다.
 
 ### 11.1 전체 모델 성능 비교
 
-| Model | F1 ↑ | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ |
-|---|---:|---:|---:|---:|
-| Kinematic | 0.8919 | 1.6351 s | 2.1481 m/s | 15.252° |
-| Ego+Map LSTM | 0.9950 | 0.1234 s | 0.3929 m/s | 2.705° |
-| Full LSTM | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
-| Mamba2 Baseline | 0.9968 | 0.1058 s | **0.3453 m/s** | 2.411° |
-| Residual Interaction LSTM | 0.9958 | 0.1136 s | 0.3727 m/s | 2.711° |
-| **Final Mamba2** | **0.9971** | **0.1024 s** | 0.3456 m/s | **2.384°** |
-
-<p align="center">
-  <img src="images/01_core_model_comparison.png" width="1000">
-</p>
-
-<p align="center">
-  <em>Kinematic, LSTM, Mamba2 모델의 진입 판단 및 주행계획 예측 성능 비교</em>
-</p>
+| Model | 구조 | F1 ↑ | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ |
+|---|---|---:|---:|---:|---:|
+| Kinematic | Kinematic | 0.8919 | 1.6351 s | 2.1481 m/s | 15.252° |
+| Ego+Map LSTM | Recurrent | 0.9950 | 0.1234 s | 0.3929 m/s | 2.705° |
+| Full LSTM | Recurrent | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
+| Transformer | Attention | 0.9922 | 0.1311 s | 0.4092 m/s | 2.798° |
+| Mamba2 Baseline | SSM | 0.9968 | 0.1058 s | **0.3453 m/s** | 2.411° |
+| Residual Interaction LSTM | Recurrent + Interaction | 0.9958 | 0.1136 s | 0.3727 m/s | 2.711° |
+| **Final Mamba2** | **SSM + Interaction** | **0.9971** | **0.1024 s** | 0.3456 m/s | **2.384°** |
 
 Kinematic baseline과 비교했을 때
-시계열 기반 LSTM과 Mamba2 모델은 모든 예측 항목에서 큰 성능 향상을 보였다.
+모든 sequence model에서 큰 성능 향상을 확인하였다.
 
-또한 동일한 multi-agent 입력을 사용한 Full LSTM과 Mamba2를 비교했을 때
-Mamba2가 전반적으로 더 낮은 regression error와 높은 F1-score를 기록하였다.
+또한 동일한 multi-agent trajectory 입력과 유사한 parameter 규모에서
+LSTM, Transformer, Mamba2를 비교한 결과,
+본 실험에서는 Mamba2가 F1-score와 regression metric 전반에서
+가장 좋은 성능을 기록하였다.
 
 ---
 
-### 11.2 Full LSTM 대비 Final Mamba2
+### 11.2 LSTM / Transformer / Mamba2 비교
 
-Full LSTM과 최종 Mamba2 모델의 성능을 직접 비교하면 다음과 같다.
+Temporal encoder 구조만 변경한 세 모델의 비교 결과는 다음과 같다.
+
+| Model | Parameters | F1 ↑ | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ |
+|---|---:|---:|---:|---:|---:|
+| LSTM | 97,670 | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
+| Transformer | 109,958 | 0.9922 | 0.1311 s | 0.4092 m/s | 2.798° |
+| **Mamba2** | 108,434 | **0.9968** | **0.1058 s** | **0.3453 m/s** | **2.411°** |
+
+Transformer와 Mamba2의 parameter 차이는 약 1.4%로,
+유사한 model capacity에서 Attention 기반 구조와 SSM 기반 구조를 비교하였다.
+
+Transformer 대비 Mamba2의 regression error는 다음과 같이 감소하였다.
 
 ```text
-F1-score
-0.9958 -> 0.9971
-
 TTE MAE
-0.1165 s -> 0.1024 s
+0.1311 s -> 0.1058 s
+약 19.3% 감소
 
 Entry Speed MAE
-0.3773 m/s -> 0.3456 m/s
+0.4092 m/s -> 0.3453 m/s
+약 15.6% 감소
 
 Entry Heading MAE
-2.747° -> 2.384°
+2.798° -> 2.411°
+약 13.8% 감소
 ```
 
-오차 감소율은 다음과 같다.
-
-| Metric | 감소율 |
-|---|---:|
-| TTE MAE | **12.10% 감소** |
-| Entry Speed MAE | **8.40% 감소** |
-| Entry Heading MAE | **13.21% 감소** |
-
-이를 통해 본 실험에서는
-Mamba2 기반 temporal encoder가 LSTM보다
-회전교차로 진입 전의 시계열 패턴을 더 정확하게 표현하는 결과를 확인하였다.
+본 rounD 기반 실험 조건에서는
+Mamba2가 Transformer보다 전반적으로 더 좋은 예측 성능을 기록하였다.
 
 ---
 
@@ -1214,15 +1316,13 @@ Mamba2 Baseline과 Residual Interaction Mamba2를 비교하면 다음과 같다.
 | Entry Heading MAE | 2.411° | **2.384°** |
 
 Interaction feature를 추가했을 때
-성능 변화 폭 자체는 크지 않았다.
+성능 변화 폭 자체는 크지 않았지만,
+기존 Mamba2의 classification 성능을 유지하면서
+F1, TTE, Heading metric이 추가로 개선되었다.
 
-이는 raw multi-agent trajectory가 이미 진입 행동과 관련된 대부분의 정보를 포함하고 있으며,
-TTC와 temporal gap 정보는 이를 완전히 대체하기보다는
-**추가적인 보정 정보로 활용되는 것이 적절함**을 의미한다.
-
-실제로 naive interaction fusion은 성능을 저하시켰지만,
-residual correction 방식에서는 기존 성능을 유지하면서
-F1, TTE, Heading metric이 소폭 개선되었다.
+이는 raw multi-agent trajectory가 주요 정보를 담당하고,
+TTC 및 Temporal Gap 기반 interaction feature는
+이를 보완하는 residual information으로 활용되는 것이 적절함을 보여준다.
 
 ---
 
@@ -1257,7 +1357,7 @@ GO / WAIT classification의 confusion matrix는 다음과 같다.
 | True WAIT | 7,086 | 21 |
 | True GO | 15 | 6,174 |
 
-총 13,296개의 Test sample 중 36개가 오분류되었다.
+총 13,296개의 Test sample 중 오분류는 36개였다.
 
 ---
 
@@ -1294,8 +1394,9 @@ Ego + Neighbor Past Trajectory (2 s)
 ```
 
 최종적으로 본 프로젝트에서는
-**Mamba2 기반 시계열 표현을 중심으로 주변 차량의 interaction 정보를 residual 방식으로 보완하고,
-진입 판단과 미래 주행 궤적을 동시에 예측하는 multi-task framework**를 구성하였다.
+**Recurrent(LSTM), Attention(Transformer), SSM(Mamba2) 구조를 비교한 뒤,
+가장 높은 예측 성능을 보인 Mamba2를 기반으로
+TTC / Temporal Gap interaction과 future trajectory prediction을 확장하였다.**
 
 ---
 
