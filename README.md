@@ -1161,45 +1161,46 @@ FDE = 마지막 시점의 위치 오차
 
 ---
 
-### 10.4 Constant Velocity Baseline
+### 10.4 LSTM과 Mamba2의 미래 궤적 예측 비교
 
-Trajectory prediction 성능을 비교하기 위해
-현재 Ego 속도가 그대로 유지된다고 가정하는
-Constant Velocity(CV) baseline을 구성하였다.
+동일한 4초 Future Trajectory Prediction 조건에서  
+LSTM과 Mamba2 기반 모델의 궤적 예측 성능을 비교하였다.
 
-```text
-x(t) = vx × t
-y(t) = vy × t
-```
-
-즉, 차량이 현재 속도와 진행 방향을 유지한다고 가정하여
-향후 4초의 위치를 계산하였다.
-
-Test set 결과는 다음과 같다.
+두 모델 모두 기존 backbone 및 interaction branch를 고정하고,  
+동일한 구조의 trajectory head만 추가 학습하였다.
 
 | Model | ADE ↓ | FDE ↓ |
 |---|---:|---:|
-| Constant Velocity | 3.5826 m | 9.1725 m |
-| **Final Mamba2** | **0.7742 m** | **1.8905 m** |
+| LSTM | 0.8273 m | 2.0360 m |
+| **Mamba2** | **0.7742 m** | **1.8905 m** |
+
+#### ADE 비교
 
 <p align="center">
-  <img src="images/02_trajectory_comparison.png" width="750">
+  <img src="images/01_lstm_mamba_ade.png" width="650">
 </p>
 
 <p align="center">
-  <em>Constant Velocity baseline과 Final Mamba2의 4초 미래 궤적 예측 오차 비교</em>
+  <em>LSTM과 Mamba2의 Average Displacement Error 비교</em>
 </p>
 
-Constant Velocity baseline 대비 Final Mamba2의 오차 감소율은 다음과 같다.
+Mamba2는 LSTM 대비 ADE를 약 **6.42% 감소**시켰다.
 
-```text
-ADE reduction : 78.39%
-FDE reduction : 79.39%
-```
+#### FDE 비교
 
-단순히 현재 속도를 유지하는 방식과 비교했을 때
-회전교차로의 곡률과 진입 이후의 주행 방향을 학습한 모델이
-미래 trajectory를 훨씬 정확하게 예측하는 것을 확인하였다.
+<p align="center">
+  <img src="images/02_lstm_mamba_fde.png" width="650">
+</p>
+
+<p align="center">
+  <em>LSTM과 Mamba2의 Final Displacement Error 비교</em>
+</p>
+
+Mamba2는 LSTM 대비 FDE를 약 **7.15% 감소**시켰다.
+
+이를 통해 본 실험에서는 Mamba2 기반 scene representation이  
+LSTM 기반 representation보다 향후 4초의 주행 궤적 예측에서도  
+더 낮은 위치 오차를 기록하였다.
 
 ---
 
@@ -1250,24 +1251,38 @@ Residual Interaction 기반 최종 모델의 성능을 비교하였다.
 
 ### 11.1 전체 모델 성능 비교
 
-| Model | 구조 | F1 ↑ | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ |
-|---|---|---:|---:|---:|---:|
-| Kinematic | Kinematic | 0.8919 | 1.6351 s | 2.1481 m/s | 15.252° |
-| Ego+Map LSTM | Recurrent | 0.9950 | 0.1234 s | 0.3929 m/s | 2.705° |
-| Full LSTM | Recurrent | 0.9958 | 0.1165 s | 0.3773 m/s | 2.747° |
-| Transformer | Attention | 0.9922 | 0.1311 s | 0.4092 m/s | 2.798° |
-| Mamba2 Baseline | SSM | 0.9968 | 0.1058 s | **0.3453 m/s** | 2.411° |
-| Residual Interaction LSTM | Recurrent + Interaction | 0.9958 | 0.1136 s | 0.3727 m/s | 2.711° |
-| **Final Mamba2** | **SSM + Interaction** | **0.9971** | **0.1024 s** | 0.3456 m/s | **2.384°** |
+최종 평가는 recording-level split으로 분리된  
+**Test set 13,296 samples**를 기준으로 수행하였다.
 
-Kinematic baseline과 비교했을 때
-모든 sequence model에서 큰 성능 향상을 확인하였다.
+| Model | 구조 | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ | ADE ↓ | FDE ↓ |
+|---|---|---:|---:|---:|---:|---:|
+| Kinematic / Constant Velocity | Kinematic | 1.6351 s | 2.1481 m/s | 15.252° | 3.5826 m | 9.1725 m |
+| Ego+Map LSTM | Recurrent | 0.1234 s | 0.3929 m/s | 2.705° | - | - |
+| Full LSTM | Recurrent | 0.1165 s | 0.3773 m/s | 2.747° | - | - |
+| Transformer | Attention | 0.1311 s | 0.4092 m/s | 2.798° | - | - |
+| Mamba2 Baseline | SSM | 0.1058 s | **0.3453 m/s** | 2.411° | - | - |
+| LSTM + Interaction + Trajectory | Recurrent + Interaction | 0.1136 s | 0.3727 m/s | 2.711° | 0.8273 m | 2.0360 m |
+| **Final Mamba2** | **SSM + Interaction** | **0.1024 s** | 0.3456 m/s | **2.384°** | **0.7742 m** | **1.8905 m** |
 
-또한 동일한 multi-agent trajectory 입력과 유사한 parameter 규모에서
-LSTM, Transformer, Mamba2를 비교한 결과,
-본 실험에서는 Mamba2가 F1-score와 regression metric 전반에서
-가장 좋은 성능을 기록하였다.
+> ADE와 FDE는 Future Trajectory head를 학습한 모델에 대해서만 측정하였다.  
+> Kinematic row의 ADE/FDE는 현재 속도를 유지한다고 가정한 Constant Velocity trajectory baseline 결과이다.
 
+Kinematic baseline과 비교했을 때 모든 sequence model에서
+진입 시점, 진입 속도 및 진입 방향 예측 오차가 크게 감소하였다.
+
+또한 동일한 4초 미래 궤적 예측 조건에서
+Mamba2 기반 모델은 LSTM 기반 모델보다 ADE와 FDE 모두 낮은 오차를 기록하였다.
+
+```text
+LSTM → Mamba2
+
+ADE
+0.8273 m → 0.7742 m
+약 6.42% 감소
+
+FDE
+2.0360 m → 1.8905 m
+약 7.15% 감소
 ---
 
 ### 11.2 LSTM / Transformer / Mamba2 비교
