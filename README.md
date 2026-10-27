@@ -1161,47 +1161,97 @@ FDE = 마지막 시점의 위치 오차
 
 ---
 
-### 10.4 LSTM과 Mamba2의 미래 궤적 예측 비교
 
-동일한 4초 Future Trajectory Prediction 조건에서  
-LSTM과 Mamba2 기반 모델의 궤적 예측 성능을 비교하였다.
+### 10.4. 미래 궤적 예측 성능 비교
 
-두 모델 모두 기존 backbone 및 interaction branch를 고정하고,  
-동일한 구조의 trajectory head만 추가 학습하였다.
+본 실험에서는 LSTM, Transformer, Mamba2 기반 모델의 4초 미래 궤적 예측 성능을 비교하였다.
 
-| Model | ADE ↓ | FDE ↓ |
+모든 실험은 rounD 데이터셋의 동일한 Recording Split을 사용하였으며, 과거 2초(50프레임)의 Ego 및 주변 차량 정보를 입력받아 향후 4초 동안의 위치를 0.2초 간격으로 총 20개 예측한다.
+
+미래 궤적 예측은 사전 학습된 Backbone을 고정(Freeze)하고 Trajectory Head만 학습하는 방식으로 수행하였다.
+
+#### 모델별 ADE/FDE 비교
+
+| 모델 | ADE (m) ↓ | FDE (m) ↓ |
 |---|---:|---:|
-| LSTM | 0.8273 m | 2.0360 m |
-| **Mamba2** | **0.7742 m** | **1.8905 m** |
+| LSTM + Interaction | 0.8273 | 2.0360 |
+| Transformer + Trajectory Head | 0.9114 | 2.1825 |
+| **Mamba2 + Interaction** | **0.7742** | **1.8905** |
 
-#### ADE 비교
+ADE(Average Displacement Error)는 예측한 미래 궤적과 실제 궤적 사이의 평균 위치 오차이며, FDE(Final Displacement Error)는 예측 구간 마지막 시점의 위치 오차이다. 두 지표 모두 낮을수록 예측 성능이 우수하다.
 
-<p align="center">
-  <img src="images/01_lstm_mamba_ade.png" width="650">
-</p>
+세 실험 구성 중 Mamba2 기반 모델이 ADE와 FDE 모두 가장 낮은 오차를 기록하였다.
 
-<p align="center">
-  <em>LSTM과 Mamba2의 Average Displacement Error 비교</em>
-</p>
+- LSTM 대비 Mamba2: ADE 약 6.42%, FDE 약 7.15% 감소
+- Transformer 대비 Mamba2: ADE 약 15.05%, FDE 약 13.38% 감소
 
-Mamba2는 LSTM 대비 ADE를 약 **6.42% 감소**시켰다.
+#### ADE 비교 그래프
 
-#### FDE 비교
+![LSTM, Transformer, Mamba2 ADE 비교](images/01_three_model_ade.png)
 
-<p align="center">
-  <img src="images/02_lstm_mamba_fde.png" width="650">
-</p>
+#### FDE 비교 그래프
 
-<p align="center">
-  <em>LSTM과 Mamba2의 Final Displacement Error 비교</em>
-</p>
+![LSTM, Transformer, Mamba2 FDE 비교](images/02_three_model_fde.png)
 
-Mamba2는 LSTM 대비 FDE를 약 **7.15% 감소**시켰다.
+#### Transformer 미래 궤적 예측 추가 실험
 
-이를 통해 본 실험에서는 Mamba2 기반 scene representation이  
-LSTM 기반 representation보다 향후 4초의 주행 궤적 예측에서도  
-더 낮은 위치 오차를 기록하였다.
+기존 Transformer Baseline 모델에 Trajectory Head를 추가하여 미래 궤적 예측 실험을 수행하였다.
 
+이미 학습된 Transformer 체크포인트를 불러온 뒤 Backbone 파라미터는 고정하고, 새로 추가한 Trajectory Head만 학습하였다.
+
+| 항목 | 실험 설정 |
+|---|---|
+| 데이터셋 | rounD, Location 0 |
+| 학습 데이터 | 77,644개 |
+| 검증 데이터 | 16,751개 |
+| 테스트 데이터 | 13,296개 |
+| 관측 구간 | 과거 2초, 50프레임 |
+| 예측 구간 | 미래 4초, 20개 Waypoint |
+| Backbone | Transformer Baseline (Frozen) |
+| 학습 대상 | Trajectory Head |
+| 학습 파라미터 | 13,736개 |
+| Batch Size | 64 |
+| Learning Rate | 0.001 |
+| 최대 Epoch | 15 |
+| 최적 Epoch | 5 |
+| Early Stopping | Epoch 9 |
+
+검증 데이터에서는 5번째 Epoch에서 최적 ADE 0.8522 m를 기록하였다.
+
+최적 체크포인트를 사용한 테스트 결과는 다음과 같다.
+
+- **Test ADE: 0.9114 m**
+- **Test FDE: 2.1825 m**
+
+#### 실험 결과 해석
+
+Transformer는 4초 미래 궤적을 예측할 수 있었으나, 본 실험 구성에서는 LSTM 및 Mamba2보다 높은 ADE/FDE를 기록하였다.
+
+Mamba2 기반 모델은 평균 위치 오차와 최종 위치 오차 모두에서 가장 우수한 결과를 보였다.
+
+다만 Transformer는 Residual Interaction 모듈이 없는 Baseline Backbone에 Trajectory Head만 추가한 구성이며, 비교 대상인 LSTM과 Mamba2의 결과에는 상호작용 정보를 활용하는 Residual Interaction 모듈이 포함되어 있다.
+
+따라서 본 결과는 세 가지 최종 실험 구성의 성능 비교를 의미하며, Backbone 구조의 영향만을 독립적으로 검증한 결과는 아니다.
+
+#### 관련 코드
+
+| 파일 | 설명 |
+|---|---|
+| `models/transformer_trajectory.py` | Transformer 기반 궤적 예측 모델 |
+| `train/train_transformer_trajectory.py` | Trajectory Head 학습 및 ADE/FDE 평가 |
+| `scripts/52_make_three_model_trajectory_comparison.py` | 세 모델 ADE/FDE 비교 그래프 생성 |
+
+Transformer 미래 궤적 예측 학습:
+
+```bash
+python -u train/train_transformer_trajectory.py
+```
+
+ADE/FDE 비교 그래프 생성:
+
+```bash
+python scripts/52_make_three_model_trajectory_comparison.py
+```
 ---
 
 ### 10.5 Test Sample 예측 결과
@@ -1249,40 +1299,78 @@ Residual Interaction 기반 최종 모델의 성능을 비교하였다.
 
 ---
 
-### 11.1 전체 모델 성능 비교
 
-최종 평가는 recording-level split으로 분리된  
-**Test set 13,296 samples**를 기준으로 수행하였다.
+### 11.1. 최종 모델 성능 비교
 
-| Model | 구조 | TTE MAE ↓ | Speed MAE ↓ | Heading MAE ↓ | ADE ↓ | FDE ↓ |
-|---|---|---:|---:|---:|---:|---:|
-| Kinematic / Constant Velocity | Kinematic | 1.6351 s | 2.1481 m/s | 15.252° | 3.5826 m | 9.1725 m |
-| Ego+Map LSTM | Recurrent | 0.1234 s | 0.3929 m/s | 2.705° | - | - |
-| Full LSTM | Recurrent | 0.1165 s | 0.3773 m/s | 2.747° | - | - |
-| Transformer | Attention | 0.1311 s | 0.4092 m/s | 2.798° | - | - |
-| Mamba2 Baseline | SSM | 0.1058 s | **0.3453 m/s** | 2.411° | - | - |
-| LSTM + Interaction + Trajectory | Recurrent + Interaction | 0.1136 s | 0.3727 m/s | 2.711° | 0.8273 m | 2.0360 m |
-| **Final Mamba2** | **SSM + Interaction** | **0.1024 s** | 0.3456 m/s | **2.384°** | **0.7742 m** | **1.8905 m** |
+본 프로젝트에서는 Constant Velocity 기반 예측을 기준으로 LSTM, Transformer, Mamba2 모델을 비교하고, 상호작용 정보를 반영한 최종 모델의 성능을 평가하였다.
 
-> ADE와 FDE는 Future Trajectory head를 학습한 모델에 대해서만 측정하였다.  
-> Kinematic row의 ADE/FDE는 현재 속도를 유지한다고 가정한 Constant Velocity trajectory baseline 결과이다.
+평가 항목은 GO/WAIT 진입 판단 정확도, 진입 예상 시간(TTE), 진입 속도, 진입 방향, 미래 궤적 ADE 및 FDE이다.
 
-Kinematic baseline과 비교했을 때 모든 sequence model에서
-진입 시점, 진입 속도 및 진입 방향 예측 오차가 크게 감소하였다.
+#### 전체 모델 정량 평가 결과
 
-또한 동일한 4초 미래 궤적 예측 조건에서
-Mamba2 기반 모델은 LSTM 기반 모델보다 ADE와 FDE 모두 낮은 오차를 기록하였다.
+| 모델 | GO/WAIT Acc. (%) ↑ | TTE MAE (s) ↓ | Speed MAE (m/s) ↓ | Heading MAE (°) ↓ | ADE (m) ↓ | FDE (m) ↓ |
+|---|---:|---:|---:|---:|---:|---:|
+| Constant Velocity | 90.68 | 1.6351 | 2.1481 | 15.252 | 3.5826 | 9.1725 |
+| Ego + Map LSTM | 99.53 | 0.1234 | 0.3929 | 2.705 | - | - |
+| LSTM Baseline | 99.61 | 0.1165 | 0.3773 | 2.747 | - | - |
+| Transformer Baseline | 99.28 | 0.1311 | 0.4092 | 2.798 | 0.9114 | 2.1825 |
+| Mamba2 Baseline | 99.70 | 0.1058 | 0.3453 | 2.411 | - | - |
+| LSTM + Interaction + Trajectory | 99.61 | 0.1136 | 0.3727 | 2.711 | 0.8273 | 2.0360 |
+| **Mamba2 + Interaction + Trajectory** | **99.73** | **0.1024** | **0.3456** | **2.384** | **0.7742** | **1.8905** |
 
-```text
-LSTM → Mamba2
+※ `-`는 해당 모델 구성에서 미래 궤적 예측 성능을 평가하지 않았음을 의미한다.
 
-ADE
-0.8273 m → 0.7742 m
-약 6.42% 감소
+※ Transformer Baseline 행의 진입 판단 관련 지표는 기존 Transformer Backbone 실험 결과이며, ADE/FDE는 해당 체크포인트를 고정한 뒤 Trajectory Head만 추가 학습한 결과이다.
 
-FDE
-2.0360 m → 1.8905 m
-약 7.15% 감소
+#### 진입 판단 성능 비교
+
+LSTM, Transformer, Mamba2 모두 Constant Velocity 기반 예측보다 높은 진입 판단 정확도를 기록하였다.
+
+기본 Backbone 비교에서는 Mamba2가 GO/WAIT 정확도 99.70%, TTE MAE 0.1058초, 진입 속도 MAE 0.3453 m/s, 진입 방향 MAE 2.411°를 기록하여 가장 우수한 종합 성능을 보였다.
+
+추가로 Residual Interaction 모듈을 적용한 최종 Mamba2 모델은 GO/WAIT 정확도 99.73%, TTE MAE 0.1024초, 진입 방향 MAE 2.384°를 기록하였다.
+
+이를 통해 상호작용 기반 TTC 및 Temporal Gap 정보가 진입 시점과 방향 예측을 정교하게 보정하는 데 기여함을 확인하였다.
+
+#### 미래 궤적 예측 성능 비교
+
+미래 4초 궤적 예측 성능은 다음과 같다.
+
+| 모델 구성 | ADE (m) ↓ | FDE (m) ↓ |
+|---|---:|---:|
+| LSTM + Interaction | 0.8273 | 2.0360 |
+| Transformer + Trajectory Head | 0.9114 | 2.1825 |
+| **Mamba2 + Interaction** | **0.7742** | **1.8905** |
+
+최종 Mamba2 모델은 LSTM 대비 ADE를 약 6.42%, FDE를 약 7.15% 감소시켰다.
+
+Transformer 대비로는 ADE를 약 15.05%, FDE를 약 13.38% 감소시켰다.
+
+다만 Transformer는 Residual Interaction 모듈을 사용하지 않았으므로, 해당 결과만으로 Backbone 구조 자체의 우위를 단정할 수는 없다.
+
+#### 최종 선정 모델
+
+본 프로젝트의 최종 모델은 **Mamba2 + Residual Interaction + Trajectory Head** 구성이다.
+
+최종 모델은 과거 2초의 Ego 및 주변 차량 움직임과 원형 교차로 진입 지점의 상호작용 정보를 활용해 다음 항목을 예측한다.
+
+1. GO/WAIT 진입 판단
+2. 진입 예상 시간(TTE)
+3. 진입 속도
+4. 진입 방향(Heading)
+5. 미래 4초 궤적(20개 Waypoint)
+
+최종 테스트 성능은 다음과 같다.
+
+- **GO/WAIT Accuracy: 99.73%**
+- **TTE MAE: 0.1024초**
+- **Entry Speed MAE: 0.3456 m/s**
+- **Entry Heading MAE: 2.384°**
+- **Trajectory ADE: 0.7742 m**
+- **Trajectory FDE: 1.8905 m**
+
+한편 현재 Mamba2 구현은 Non-fused 연산 경로를 사용하므로 LSTM 및 Transformer보다 추론 시간이 길게 측정되었다. 따라서 본 프로젝트의 최종 모델 선정은 현재 구현의 추론 속도보다는 진입 행동 및 궤적 예측 정확도에 기반한다.
+
 ---
 
 ### 11.2 LSTM / Transformer / Mamba2 비교
