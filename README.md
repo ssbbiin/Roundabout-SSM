@@ -1233,25 +1233,6 @@ Mamba2 기반 모델은 평균 위치 오차와 최종 위치 오차 모두에�
 
 따라서 본 결과는 세 가지 최종 실험 구성의 성능 비교를 의미하며, Backbone 구조의 영향만을 독립적으로 검증한 결과는 아니다.
 
-#### 관련 코드
-
-| 파일 | 설명 |
-|---|---|
-| `models/transformer_trajectory.py` | Transformer 기반 궤적 예측 모델 |
-| `train/train_transformer_trajectory.py` | Trajectory Head 학습 및 ADE/FDE 평가 |
-| `scripts/52_make_three_model_trajectory_comparison.py` | 세 모델 ADE/FDE 비교 그래프 생성 |
-
-Transformer 미래 궤적 예측 학습:
-
-```bash
-python -u train/train_transformer_trajectory.py
-```
-
-ADE/FDE 비교 그래프 생성:
-
-```bash
-python scripts/52_make_three_model_trajectory_comparison.py
-```
 ---
 
 ### 10.5 Test Sample 예측 결과
