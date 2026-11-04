@@ -1,0 +1,6 @@
+
+Model,Interaction,ADE_m,FDE_m
+LSTM,No,0.8432,2.0394
+Transformer,No,0.9114,2.1825
+Mamba2,No,0.7596,1.9009
+Mamba2 + Interaction,Yes,0.7742,1.8905
